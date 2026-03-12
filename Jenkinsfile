@@ -32,7 +32,7 @@ pipeline {
                 }
             }
         }
-        
+
         stage("Quality Gate") {
             steps {
                 timeout(time: 3, unit: 'MINUTES') {
@@ -40,15 +40,16 @@ pipeline {
                 }
             }
         }
-        stage("Trivy FS Scan") {
+        stage("Trivy Image Scan") {
             steps {
                 sh """
-                trivy fs \
-                    --exit-code 0 \
-                    --severity HIGH,CRITICAL \
-                    --format table \
-                    -o trivy-fs-report.txt \
-                    .
+                docker run --rm \
+                -v /var/run/docker.sock:/var/run/docker.sock \
+                aquasec/trivy:latest image \
+                --exit-code 0 \
+                --severity HIGH,CRITICAL \
+                ${IMAGE_NAME}:${env.IMAGE_TAG} \
+                > trivy-image-report.txt
                 """
             }
             post {
