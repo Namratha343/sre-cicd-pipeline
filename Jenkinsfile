@@ -10,7 +10,6 @@ pipeline {
         EMAIL_TO      = "namratha343@gmail.com"
         SONAR_PROJECT = "sre-cicd-pipeline"
     }
-
     stages {
         stage("Git Checkout") {
             steps {
