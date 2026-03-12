@@ -40,17 +40,21 @@ pipeline {
                 }
             }
         }
-        stage("Trivy Image Scan") {
+        stage("Trivy FS Scan") {
             steps {
                 sh """
-                docker run --rm \
-                -v /var/run/docker.sock:/var/run/docker.sock \
-                aquasec/trivy:latest image \
-                --exit-code 0 \
-                --severity HIGH,CRITICAL \
-                ${IMAGE_NAME}:${env.IMAGE_TAG} \
-                > trivy-image-report.txt
+                trivy fs \
+                    --exit-code 0 \
+                    --severity HIGH,CRITICAL \
+                    --format table \
+                    -o trivy-fs-report.txt \
+                    .
                 """
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'trivy-fs-report.txt', allowEmptyArchive: true
+                }
             }
         }
         stage("Docker Login") {
@@ -94,19 +98,16 @@ pipeline {
         stage("Trivy Image Scan") {
             steps {
                 sh """
-                trivy image \
-                    --exit-code 0 \
-                    --severity HIGH,CRITICAL \
-                    --format table \
-                    -o trivy-image-report.txt \
-                    ${IMAGE_NAME}:${env.IMAGE_TAG}
+                docker run --rm \
+                -v /var/run/docker.sock:/var/run/docker.sock \
+                aquasec/trivy:latest image \
+                --exit-code 0 \
+                --severity HIGH,CRITICAL \
+                ${IMAGE_NAME}:${env.IMAGE_TAG} \
+                > trivy-image-report.txt
                 """
             }
-            post {
-                always {
-                    archiveArtifacts artifacts: 'trivy-image-report.txt', allowEmptyArchive: true
-                }
-            }
+        }
         }
         stage("Deploy to Kubernetes") {
             steps {
