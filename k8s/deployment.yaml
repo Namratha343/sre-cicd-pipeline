@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sre-cicd-pipeline
+  namespace: sre-cicd
+  labels:
+    app: sre-cicd-pipeline
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: sre-cicd-pipeline
+  template:
+    metadata:
+      labels:
+        app: sre-cicd-pipeline
+    spec:
+      containers:
+        - name: sre-cicd-pipeline
+          image: namratha3/sre-cicd-pipeline:IMAGE_TAG
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5001
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5001
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5001
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
