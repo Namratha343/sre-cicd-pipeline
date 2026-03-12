@@ -44,9 +44,10 @@ pipeline {
             steps {
                 sh """
                 docker run --rm \
-                -v \$PWD:/app \
+                -v ${WORKSPACE}:/app \
                 aquasec/trivy:latest fs \
-                --exit-code 0 \
+                --no-progress \
+                --format table \
                 --severity HIGH,CRITICAL \
                 /app > trivy-fs-report.txt
                 """
@@ -101,11 +102,17 @@ pipeline {
                 docker run --rm \
                 -v /var/run/docker.sock:/var/run/docker.sock \
                 aquasec/trivy:latest image \
-                --exit-code 0 \
+                --no-progress \
+                --format table \
                 --severity HIGH,CRITICAL \
                 ${IMAGE_NAME}:${env.IMAGE_TAG} \
                 > trivy-image-report.txt
                 """
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'trivy-image-report.txt', allowEmptyArchive: true
+                }
             }
         }
         stage("Deploy to Kubernetes") {
