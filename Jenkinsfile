@@ -52,11 +52,6 @@ pipeline {
                 > trivy-image-report.txt
                 """
             }
-            post {
-                always {
-                    archiveArtifacts artifacts: 'trivy-fs-report.txt', allowEmptyArchive: true
-                }
-            }
         }
         stage("Docker Login") {
             steps {
