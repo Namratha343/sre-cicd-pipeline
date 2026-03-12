@@ -43,12 +43,12 @@ pipeline {
         stage("Trivy FS Scan") {
             steps {
                 sh """
-                trivy fs \
-                    --exit-code 0 \
-                    --severity HIGH,CRITICAL \
-                    --format table \
-                    -o trivy-fs-report.txt \
-                    .
+                docker run --rm \
+                -v \$PWD:/app \
+                aquasec/trivy:latest fs \
+                --exit-code 0 \
+                --severity HIGH,CRITICAL \
+                /app > trivy-fs-report.txt
                 """
             }
             post {
