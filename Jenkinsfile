@@ -131,37 +131,22 @@ pipeline {
         }
 
     }
-
     post {
         success {
-            echo "Pipeline succeeded — image ${IMAGE_NAME}:${env.IMAGE_TAG} deployed."
-            mail to: "${EMAIL_TO}",
-                 subject: "SUCCESS: ${JOB_NAME} #${BUILD_NUMBER}",
-                 body: """Build and deployment succeeded.
-
-Job     : ${JOB_NAME}
-Build # : ${BUILD_NUMBER}
-Image   : ${IMAGE_NAME}:${env.IMAGE_TAG}
-URL     : ${BUILD_URL}
-"""
+            slackSend(
+                channel: "#all-jenkins-cicd",
+                color: "good",
+                message: "SUCCESS: ${JOB_NAME} #${BUILD_NUMBER} deployed ${IMAGE_NAME}:${env.IMAGE_TAG}"
+            )
         }
 
         failure {
-            echo "Pipeline failed — check logs at ${BUILD_URL}"
-            mail to: "${EMAIL_TO}",
-                 subject: "FAILED: ${JOB_NAME} #${BUILD_NUMBER}",
-                 body: """Build or deployment failed.
-
-Job     : ${JOB_NAME}
-Build # : ${BUILD_NUMBER}
-URL     : ${BUILD_URL}
-
-Check the console output and Trivy reports archived in the build.
-"""
-        }
-
-        always {
-            sh "docker buildx rm sre-builder || true"
+            slackSend(
+                channel: "#all-jenkins-cicd",
+                color: "danger",
+                message: "FAILED: ${JOB_NAME} #${BUILD_NUMBER} - ${BUILD_URL}"
+            )
         }
     }
+        
 }
