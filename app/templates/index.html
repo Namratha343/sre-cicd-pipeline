@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CI/CD Pipeline Demo</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>CI/CD Pipeline Demo</h1>
+      <p class="subtitle">Powered by Jenkins · Docker · Kubernetes</p>
+    </header>
+
+    <section class="status-card">
+      <div class="status-indicator" id="status-indicator"></div>
+      <p id="deployment-status">Checking deployment status...</p>
+    </section>
+
+    <section class="message-card">
+      <h2>Backend Response</h2>
+      <div id="message-box" class="message-box">
+        <span class="placeholder">Press the button to fetch a message from the backend API.</span>
+      </div>
+      <button id="fetch-btn" onclick="fetchMessage()">Fetch from API</button>
+    </section>
+
+    <footer>
+      <p>Version: <span id="app-version">—</span> &nbsp;|&nbsp; Env: <span id="app-env">—</span></p>
+    </footer>
+  </div>
+
+  <script src="/static/script.js"></script>
+</body>
+</html>
