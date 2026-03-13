@@ -29,6 +29,7 @@ This project implements a fully automated CI/CD pipeline that satisfies the foll
 - Code quality is enforced using SonarQube with a Quality Gate
 - The system is monitored using Prometheus and Grafana
 
+application_url = http://207.180.223.198:30080/
 ---
 
 ## Project Structure
@@ -96,7 +97,7 @@ Developer pushes code to GitHub
             ▼
    Kubernetes Cluster (Contabo)
    Namespace: sre-cicd
-   App available at <server-ip>:30080
+   App available at http://207.180.223.198:30080/
             │
             ▼
    Slack Notification (success/failure)
@@ -121,7 +122,7 @@ Developer pushes code to GitHub
 
 ### Prerequisites
 
-- Jenkins running on the Contabo server (port `8080`)
+- Jenkins running on the server (port `8080`)
 - Docker installed on the Jenkins agent
 - `kubectl` installed on the Jenkins agent
 
@@ -156,6 +157,12 @@ Go to **Manage Jenkins → Credentials → Global**:
    - URL: `http://<server-ip>:9000`
    - Token: add as a Jenkins secret text credential
 3. In **Global Tool Configuration**, add a SonarQube Scanner named `sonar-scanner`.
+4. In SonarQube → **Administration → Configuration → Webhooks**, add a webhook so SonarQube can notify Jenkins when the analysis is complete (required for `waitForQualityGate` to work):
+   - Name: `jenkins`
+   - URL: `http://<jenkins-url>/sonarqube-webhook/`
+   - Click **Create**
+
+   > Without this webhook, the pipeline will hang indefinitely at the Quality Gate stage.
 
 ### 4. Create the Pipeline Job
 
@@ -195,7 +202,7 @@ All resources are deployed into the `sre-cicd` namespace, created automatically 
 ### Service
 
 - Type: **NodePort**
-- App accessible at: `http://<server-ip>:30080`
+- App accessible at: `http://207.180.223.198:30080`
 
 ### Verify Deployment
 
@@ -226,13 +233,7 @@ The Contabo server runs Prometheus and Grafana to monitor the health and perform
 | Tool | URL |
 |------|-----|
 | Prometheus | `http://<server-ip>:9090` |
-| Grafana | `http://<server-ip>:3000` |
-
-### Recommended Grafana Dashboards
-
-- **Kubernetes Cluster Monitoring** — Dashboard ID `315`
-- **Node Exporter Full** — Dashboard ID `1860`
-- **Jenkins Performance** — Dashboard ID `9964`
+| Grafana | `http://207.180.223.198:31551/d/sre-cicd-dashboard-2/sre-ci-cd-pipeline-e28094-kubernetes-monitoring?orgId=1&from=now-1h&to=now&timezone=browser&refresh=30s` |
 
 ---
 
