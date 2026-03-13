@@ -1,6 +1,33 @@
-# sre-cicd-pipeline
+# CI/CD Pipeline with Jenkins, Docker, and Kubernetes
 
-CI/CD pipeline to automate build and deployment of applications through Kubernetes when code is pushed through the GitHub repo.
+A production-ready CI/CD pipeline that automates the build, security scanning, and deployment of a Python Flask application to a Kubernetes cluster using Jenkins, Docker, SonarQube, Trivy, and Prometheus + Grafana for monitoring.
+
+---
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Project Structure](#project-structure)
+3. [Application](#application)
+4. [Pipeline Architecture](#pipeline-architecture)
+5. [Jenkins Setup](#jenkins-setup)
+6. [Kubernetes Setup](#kubernetes-setup)
+7. [Monitoring with Prometheus & Grafana](#monitoring-with-prometheus--grafana)
+8. [Running Locally](#running-locally)
+9. [Security Practices](#security-practices)
+
+---
+
+## Overview
+
+This project implements a fully automated CI/CD pipeline that satisfies the following requirements:
+
+- Whenever a commit is pushed to the GitHub repository, Jenkins automatically triggers a build
+- Upon a successful build, Jenkins deploys the artifact to a Kubernetes cluster on a Contabo server
+- The pipeline is implemented using Groovy scripting (Jenkinsfile) for flexibility and extensibility
+- Security scanning is integrated at both source and image level using Trivy
+- Code quality is enforced using SonarQube with a Quality Gate
+- The system is monitored using Prometheus and Grafana
 
 ---
 
@@ -8,20 +35,204 @@ CI/CD pipeline to automate build and deployment of applications through Kubernet
 
 ```
 sre-cicd-pipeline/
-├── Dockerfile
-├── Jenkinsfile
+├── Dockerfile               # Multi-stage Docker build
+├── Jenkinsfile              # Groovy pipeline definition
 ├── app/
-│   ├── app.py
-│   ├── requirements.txt
+│   ├── app.py               # Flask backend
+│   ├── requirements.txt     # Python dependencies
 │   ├── static/
-│   │   ├── script.js
-│   │   └── style.css
+│   │   ├── script.js        # Frontend API call
+│   │   └── style.css        # Styling
 │   └── templates/
-│       └── index.html
+│       └── index.html       # Frontend UI
 └── k8s/
-    ├── deployment.yaml
-    └── service.yaml
+    ├── namespace.yaml       # Kubernetes namespace: sre-cicd
+    ├── deployment.yaml      # App deployment (2 replicas)
+    └── service.yaml         # NodePort service on port 30080
 ```
+
+---
+
+## Application
+
+A lightweight Python Flask app with the following endpoints:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/` | Serves the frontend UI |
+| GET | `/health` | Returns `{"status": "ok"}` — used by K8s probes |
+| GET | `/api/message` | Returns a message from the backend |
+| GET | `/metrics` | Returns app uptime and version |
+
+The frontend calls `/api/message` and displays the response, demonstrating the full pipeline flow from code to running container.
+
+---
+
+## Pipeline Architecture
+
+### Flow
+
+```
+Developer pushes code to GitHub
+            │
+            ▼
+   GitHub Webhook triggers Jenkins
+            │
+            ▼
+┌─────────────────────────────────────────┐
+│              JENKINS PIPELINE           │
+│                                         │
+│  1. Git Checkout                        │
+│  2. SonarQube Analysis                  │
+│  3. Quality Gate (pass/fail)            │
+│  4. Trivy FS Scan  ← source files       │
+│  5. Docker Login                        │
+│  6. Build & Push Image (linux/amd64)    │
+│  7. Trivy Image Scan ← built image      │
+│  8. Deploy to Kubernetes                │
+│                                         │
+└─────────────────────────────────────────┘
+            │
+            ▼
+   Kubernetes Cluster (Contabo)
+   Namespace: sre-cicd
+   App available at <server-ip>:30080
+            │
+            ▼
+   Slack Notification (success/failure)
+```
+
+### Pipeline Stages Explained
+
+| Stage | What it does |
+|-------|-------------|
+| **Git Checkout** | Pulls the latest code from the `main` branch |
+| **SonarQube Analysis** | Scans Python source code for bugs, vulnerabilities, and code smells |
+| **Quality Gate** | Fails the pipeline if SonarQube quality gate is red |
+| **Trivy FS Scan** | Scans source files and dependencies for known CVEs before building |
+| **Docker Login** | Authenticates to Docker Hub using stored Jenkins credentials |
+| **Build & Push Docker Image** | Builds a `linux/amd64` image using `docker buildx` and pushes to Docker Hub with the git SHA as the tag |
+| **Trivy Image Scan** | Scans the pushed Docker image for HIGH/CRITICAL vulnerabilities |
+| **Deploy to Kubernetes** | Applies namespace, service, and deployment manifests; waits for rollout to complete |
+
+---
+
+## Jenkins Setup
+
+### Prerequisites
+
+- Jenkins running on the Contabo server (port `8080`)
+- Docker installed on the Jenkins agent
+- `kubectl` installed on the Jenkins agent
+
+### 1. Required Plugins
+
+Install from **Manage Jenkins → Plugins**:
+
+| Plugin | Purpose |
+|--------|---------|
+| Git Plugin | GitHub checkout |
+| GitHub Plugin | `githubPush()` webhook trigger |
+| SonarQube Scanner | Code quality analysis |
+| Docker Pipeline | Docker build/push inside pipeline |
+| Kubernetes CLI Plugin | `kubectl` via kubeconfig credential |
+| Slack Notification Plugin | Pipeline success/failure alerts |
+
+### 2. Credentials to Configure
+
+Go to **Manage Jenkins → Credentials → Global**:
+
+| Credential ID | Type | Value |
+|---------------|------|-------|
+| `git-cred` | Username + Password | GitHub username + Personal Access Token |
+| `docker-cred` | Username + Password | Docker Hub username + password |
+| `kubeconfig` | Secret file | Upload `~/.kube/config` from the Contabo server |
+
+### 3. SonarQube Configuration
+
+1. In SonarQube, create a project named `sre-cicd-pipeline` and generate a token.
+2. In Jenkins → **Manage Jenkins → System**, add a SonarQube server:
+   - Name: `sonarqube`
+   - URL: `http://<server-ip>:9000`
+   - Token: add as a Jenkins secret text credential
+3. In **Global Tool Configuration**, add a SonarQube Scanner named `sonar-scanner`.
+
+### 4. Create the Pipeline Job
+
+1. **New Item → Pipeline** → name it `sre-cicd-pipeline`
+2. **Build Triggers** → check **GitHub hook trigger for GITScm polling**
+3. **Pipeline → Pipeline script from SCM**:
+   - SCM: Git
+   - Repository URL: `https://github.com/Namratha343/sre-cicd-pipeline.git`
+   - Credentials: `git-cred`
+   - Branch: `*/main`
+   - Script Path: `Jenkinsfile`
+4. Save.
+
+### 5. GitHub Webhook
+
+In GitHub repo → **Settings → Webhooks → Add webhook**:
+
+- Payload URL: `http://<server-ip>:8080/github-webhook/`
+- Content type: `application/json`
+- Trigger: **Just the push event**
+
+---
+
+## Kubernetes Setup
+
+### Namespace
+
+All resources are deployed into the `sre-cicd` namespace, created automatically by the pipeline via `k8s/namespace.yaml`.
+
+### Deployment
+
+- **2 replicas** for high availability
+- **Liveness probe** on `/health` — restarts unhealthy pods
+- **Readiness probe** on `/health` — removes pod from service until ready
+- **Resource limits** — CPU: 250m, Memory: 256Mi
+
+### Service
+
+- Type: **NodePort**
+- App accessible at: `http://<server-ip>:30080`
+
+### Verify Deployment
+
+```bash
+kubectl get pods -n sre-cicd
+kubectl get svc -n sre-cicd
+kubectl logs -l app=sre-cicd-pipeline -n sre-cicd
+```
+
+---
+
+## Monitoring with Prometheus & Grafana
+
+The Contabo server runs Prometheus and Grafana to monitor the health and performance of the CI/CD pipeline and the deployed application.
+
+### What is Monitored
+
+| Metric | Source |
+|--------|--------|
+| Pod health and restarts | Kubernetes node metrics |
+| CPU and memory usage | Container resource metrics |
+| HTTP request rates | Application `/metrics` endpoint |
+| App uptime | Application `/metrics` endpoint |
+| Jenkins build status | Jenkins Prometheus plugin |
+
+### Accessing the Dashboards
+
+| Tool | URL |
+|------|-----|
+| Prometheus | `http://<server-ip>:9090` |
+| Grafana | `http://<server-ip>:3000` |
+
+### Recommended Grafana Dashboards
+
+- **Kubernetes Cluster Monitoring** — Dashboard ID `315`
+- **Node Exporter Full** — Dashboard ID `1860`
+- **Jenkins Performance** — Dashboard ID `9964`
 
 ---
 
@@ -32,182 +243,43 @@ sre-cicd-pipeline/
 
 ### Steps
 
-**1. Navigate to the app directory**
 ```bash
+# 1. Navigate to the app directory
 cd app
-```
 
-**2. Create and activate a virtual environment**
-```bash
+# 2. Create and activate a virtual environment
 python3 -m venv venv
 source venv/bin/activate
-```
 
-**3. Install dependencies**
-```bash
+# 3. Install dependencies
 pip install -r requirements.txt
-```
 
-**4. Start the app**
-```bash
+# 4. Run the app
 python app.py
 ```
 
-The app will be available at **http://localhost:5001**
+App available at **http://localhost:5001**
 
-**5. To stop the app**
+### Run with Docker
 
-Press `Ctrl+C`, then deactivate the virtual environment:
 ```bash
-deactivate
-```
+# Build
+docker build -t sre-cicd-pipeline:latest .
 
-### Override the port (optional)
-```bash
-PORT=8080 python app.py
+# Run
+docker run -p 5001:5001 sre-cicd-pipeline:latest
 ```
 
 ---
 
-## API Endpoints
+## Security Practices
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/` | Serves the frontend UI |
-| GET | `/health` | Returns `{"status": "ok"}` |
-| GET | `/api/message` | Returns a message from the backend |
-| GET | `/metrics` | Returns app uptime and version info |
-
----
-
-## Running with Docker
-
-**1. Build the image**
-```bash
-docker build -t cicd-demo:latest .
-```
-
-**2. Run the container**
-```bash
-docker run -p 5001:5000 -e APP_ENV=production -e APP_VERSION=1.0.0 cicd-demo:latest
-```
-
-The app will be available at **http://localhost:5001**
-
----
-
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `5001` | Port the app listens on |
-| `APP_VERSION` | `1.0.0` | App version displayed in the UI |
-| `APP_ENV` | `development` | Environment name displayed in the UI |
-
----
-
-## CI/CD Pipeline (Jenkins)
-
-### Pipeline Overview
-
-```
-GitHub Push
-    │
-    ▼
-Git Checkout  →  SonarQube Analysis  →  Quality Gate
-    │
-    ▼
-Trivy FS Scan (source files)
-    │
-    ▼
-Docker Login  →  Build Docker Image
-    │
-    ▼
-Trivy Image Scan (built image)
-    │
-    ▼
-Push to Docker Hub  →  Deploy to Kubernetes  →  Email Notification
-```
-
-### Jenkins Setup on Contabo Server
-
-#### 1. Required Jenkins Plugins
-
-Install these from **Manage Jenkins → Plugins**:
-
-| Plugin | Purpose |
-|--------|---------|
-| Git Plugin | GitHub checkout |
-| GitHub Plugin | `githubPush()` webhook trigger |
-| SonarQube Scanner | Code quality analysis |
-| Docker Pipeline | Docker build/push inside pipeline |
-| Kubernetes CLI Plugin | `kubectl` via kubeconfig credential |
-| Email Extension Plugin | Success/failure email notifications |
-
-#### 2. Jenkins Credentials to Create
-
-Go to **Manage Jenkins → Credentials → Global** and add:
-
-| ID | Type | What to put |
-|----|------|-------------|
-| `git-cred` | Username + Password | GitHub username + Personal Access Token |
-| `docker-cred` | Username + Password | Docker Hub username + password |
-| `kubeconfig` | Secret file | Upload your `~/.kube/config` from the Contabo server |
-
-#### 3. Configure SonarQube
-
-1. In SonarQube, create a project named `sre-cicd-pipeline` and copy the token.
-2. In Jenkins → **Manage Jenkins → System**, add a **SonarQube server**:
-   - Name: `sonarqube`
-   - URL: `http://<contabo-ip>:9000`
-   - Token: (add as a Jenkins secret text credential and select it)
-3. In Jenkins → **Global Tool Configuration**, add a **SonarQube Scanner** installation named `sonar-scanner`.
-
-#### 4. Install Trivy on the Jenkins Agent
-
-```bash
-sudo apt-get install -y wget apt-transport-https gnupg
-wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
-echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" \
-    | sudo tee /etc/apt/sources.list.d/trivy.list
-sudo apt-get update && sudo apt-get install -y trivy
-```
-
-#### 5. Create the Jenkins Pipeline Job
-
-1. **New Item** → **Pipeline** → name it `sre-cicd-pipeline`
-2. Under **Build Triggers**, check **GitHub hook trigger for GITScm polling**
-3. Under **Pipeline**, select **Pipeline script from SCM**:
-   - SCM: Git
-   - Repository URL: `https://github.com/Namratha343/sre-cicd-pipeline.git`
-   - Credentials: `git-cred`
-   - Branch: `*/main`
-   - Script Path: `Jenkinsfile`
-4. Save.
-
-#### 6. Configure GitHub Webhook
-
-In your GitHub repo → **Settings → Webhooks → Add webhook**:
-
-- Payload URL: `http://<contabo-ip>:8080/github-webhook/`
-- Content type: `application/json`
-- Trigger: **Just the push event**
-
-#### 7. Kubernetes Access
-
-The pipeline uses the `kubeconfig` credential (secret file). Make sure:
-- The kubeconfig file has the correct server IP of your Contabo K8s cluster.
-- The context points to the right cluster.
-
-Verify connectivity from Jenkins with:
-```bash
-kubectl get nodes --kubeconfig=/path/to/your/kubeconfig
-```
-
-#### 8. App Access After Deployment
-
-Once deployed, the app is available at:
-```
-http://<contabo-server-ip>:30080
-```
-(NodePort 30080 as defined in `k8s/service.yaml`)
+| Practice | Implementation |
+|----------|---------------|
+| Source code scanning | Trivy FS scan before Docker build |
+| Image vulnerability scanning | Trivy image scan after Docker build |
+| Code quality gate | SonarQube blocks pipeline if quality gate fails |
+| No hardcoded secrets | All credentials stored in Jenkins credential store |
+| Non-root container | Docker image runs as `appuser` (non-root) |
+| Least privilege | Kubernetes resource limits enforced on all pods |
+| Immutable image tags | Git SHA used as image tag — every build is uniquely traceable |
