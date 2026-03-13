@@ -233,7 +233,10 @@ The Contabo server runs Prometheus and Grafana to monitor the health and perform
 | Tool | URL |
 |------|-----|
 | Prometheus | `http://<server-ip>:9090` |
-| Grafana | `http://207.180.223.198:31551/d/sre-cicd-dashboard-2/sre-ci-cd-pipeline-e28094-kubernetes-monitoring?orgId=1&from=now-1h&to=now&timezone=browser&refresh=30s` |
+| Grafana | `http://207.180.223.198:31551/d/sre-cicd-dashboard-2` |
+
+<img width="1226" height="680" alt="Image" src="https://github.com/user-attachments/assets/556df8c2-fd61-4bd8-85c1-63087238e0c5" />
+<img width="1222" height="556" alt="Image" src="https://github.com/user-attachments/assets/1d5f41c1-cc20-4c7b-a0d2-10c9c109bdc3" />
 
 ---
 
